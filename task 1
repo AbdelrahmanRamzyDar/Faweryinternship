@@ -1,0 +1,72 @@
+#!/bin/bash
+
+line_numbers=0
+invert_match=0
+
+# Check for --help option
+for arg in "$@"; do
+    if [[ "$arg" == "--help" ]]; then
+        echo "Usage: $0 [options] pattern file"
+        echo "Options:"
+        echo "  -n          Show line numbers"
+        echo "  -v          Invert match (non-matching lines)"
+        echo "  --help      Display this help message"
+        exit 0
+    fi
+done
+
+# Parse options using getopts
+while getopts "nv" opt; do
+    case $opt in
+        n) line_numbers=1 ;;
+        v) invert_match=1 ;;
+        *) echo "Error: Invalid option: -$OPTARG" >&2; exit 1 ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+# Check remaining arguments
+if [ $# -ne 2 ]; then
+    echo "Error: Incorrect number of arguments. Usage: $0 [options] pattern file" >&2
+    exit 1
+fi
+
+pattern="$1"
+file="$2"
+
+# Check if file exists
+if [ ! -f "$file" ]; then
+    echo "Error: File '$file' does not exist." >&2
+    exit 1
+fi
+
+line_number=0
+
+while IFS= read -r line; do
+    line_number=$((line_number + 1))
+    line_lower="${line,,}"
+    pattern_lower="${pattern,,}"
+
+    # Check for substring match
+    if [[ "$line_lower" == *"$pattern_lower"* ]]; then
+        matched=1
+    else
+        matched=0
+    fi
+
+    # Determine if line should be printed based on invert option
+    if [ $invert_match -eq 1 ]; then
+        print_line=$((1 - matched))
+    else
+        print_line=$matched
+    fi
+
+    # Print the line if needed
+    if [ $print_line -eq 1 ]; then
+        if [ $line_numbers -eq 1 ]; then
+            printf "%d:%s\n" "$line_number" "$line"
+        else
+            printf "%s\n" "$line"
+        fi
+    fi
+done < "$file"
