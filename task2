@@ -1,0 +1,114 @@
+Check Local DNS (/etc/resolv.conf):
+
+nslookup internal.example.com
+dig internal.example.com
+If resolution fails, check the nameservers in /etc/resolv.conf for correctness (e.g., internal DNS server IP).
+
+Test with Public DNS (8.8.8.8):
+
+
+nslookup internal.example.com 8.8.8.8
+dig @8.8.8.8 internal.example.com
+Expected Result: Internal DNS should return the correct private IP (e.g., 10.0.0.5). Public DNS (8.8.8.8) may fail if the domain is internal-only.
+
+Issue Identified?
+
+If both fail: Domain may not exist publicly, or global DNS propagation issue.
+
+If local DNS fails but public works: Internal DNS misconfiguration (e.g., missing A record).
+
+If local DNS returns wrong IP: Incorrect DNS record or caching issue.
+
+2. Diagnose Service Reachability
+If DNS resolves correctly, test connectivity to the service:
+
+
+curl -v http://internal.example.com       # Check HTTP/HTTPS response
+telnet internal.example.com 80           # Test raw TCP connection to port 80
+Bypass DNS (use the resolved IP directly):
+
+
+curl -v http://<resolved-IP>             # Replace <resolved-IP> with the actual IP
+telnet <resolved-IP> 80
+If IP works but domain doesn’t: Confirms DNS is the issue.
+
+If both fail: Problem lies in network/firewall or service configuration.
+
+3. Check Service Availability on the Server
+Confirm the service is running and listening:
+
+
+ss -tuln | grep ':80\|:443'     # Check if service is bound to port 80/443
+systemctl status nginx/apache2  # Verify web server status
+Check local firewall rules:
+
+
+iptables -L -n -v               # Look for DROP rules on ports 80/443
+ufw status                      # If using UFW firewall
+4. Network Path Analysis
+Trace the route to the server:
+
+
+traceroute <resolved-IP>        # Linux
+tracert <resolved-IP>           # Windows
+Look for hops that drop packets (e.g., firewalls, misconfigured routers).
+
+
+Possible Causes of “Host Not Found” or Unreachable Service
+DNS Issues
+Incorrect /etc/resolv.conf: Wrong nameserver IP or missing search domain.
+
+Misconfigured DNS Record: Missing or stale A/AAAA record for internal.example.com.
+
+Split-Brain DNS: Internal DNS not resolving correctly, while external DNS lacks the record.
+
+DNS Caching: Stale entries in DNS resolver cache (flush with systemd-resolve --flush-caches).
+
+Network Issues
+Firewall Blocking Ports:
+
+Host firewall (iptables/ufw) blocking 80/443.
+
+Network firewall/NACLs blocking traffic between client and server.
+
+Routing Problems:
+
+Incorrect subnet routes in the network.
+
+VPN misconfiguration (if accessing over VPN).
+
+Proxy/Load Balancer Misconfig: Proxy not forwarding requests to the backend.
+
+Service Issues
+Web Service Not Listening: Service crashed or bound to localhost only (check ss -tuln).
+
+Hosts File Override: Incorrect entry in /etc/hosts pointing to a wrong IP or 127.0.0.1.
+
+Other
+MTU Issues: Packet fragmentation due to mismatched MTU sizes (common in VPNs).
+
+Client-Side Caching: Browser/DNS cache retaining old records (clear cache or use curl --noproxy).
+
+DNSSEC Validation Failure: DNS resolver rejecting unsigned responses for a secure zone.
+
+
+Temporary Bypass DNS: Add the correct IP to /etc/hosts:
+
+
+echo "<correct-IP> internal.example.com" | sudo tee -a /etc/hosts
+Restart DNS Services:
+
+sudo systemctl restart systemd-resolved  # For systemd-resolved
+Allow Traffic in Firewall:
+
+
+sudo ufw allow 80/tcp    # If UFW is enabled
+Validate Web Service Config: Ensure the service binds to 0.0.0.0:80, not 127.0.0.1:80.
+
+Summary of Diagnostic Commands
+Task	Command
+Check DNS Resolution	dig +short internal.example.com
+Test HTTP Connectivity	curl -I http://internal.example.com
+Check Open Ports	nc -zv internal.example.com 80
+Verify Service Listening	ss -tuln | grep ':80'
+Trace Network Path	traceroute <resolved-IP>
